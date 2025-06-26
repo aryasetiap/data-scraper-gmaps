@@ -1,11 +1,13 @@
 """
-Scraper Google Maps untuk mengambil data Puskesmas di Bandar Lampung.
+Google Maps Scraper
 
-Fitur:
-- Mengambil nama tempat, rating, jumlah ulasan, alamat, URL Google Maps, latitude, dan longitude.
-- Menyimpan hasil dalam file CSV.
-- Tidak mengambil kategori tempat.
-- Alamat sudah dibersihkan dan disimpan dalam satu kolom.
+Script ini melakukan scraping pada hasil pencarian Google Maps dan mengekstrak informasi seperti nama tempat, rating, jumlah ulasan, alamat, URL Google Maps, latitude, dan longitude. Hasil ekstraksi disimpan dalam file CSV.
+
+Dependencies:
+- Selenium
+- BeautifulSoup
+- Pandas
+- webdriver_manager
 
 Cara kerja:
 1. Membuka Google Maps dengan query pencarian.
@@ -13,7 +15,7 @@ Cara kerja:
 3. Mengekstrak data dari setiap kartu hasil pencarian.
 4. Menyimpan data ke file CSV.
 
-Dibuat menggunakan Selenium, BeautifulSoup, dan Pandas.
+PERINGATAN: Script ini hanya untuk kebutuhan riset dan ilmu pengetahuan. Penggunaan data hasil scraping harus mematuhi kebijakan dan hukum yang berlaku.
 """
 
 import time
@@ -27,18 +29,16 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 
-SEARCH_QUERY = "Puskesmas di Bandar Lampung"
-OUTPUT_FILENAME = "hasil_scrape_test.csv"
-
 def parse_card_final(card_html_string):
     """
     Mengekstrak informasi dari satu kartu hasil pencarian Google Maps.
 
-    Parameter:
+    Args:
         card_html_string (str): HTML dari satu kartu hasil pencarian.
 
-    Return:
+    Returns:
         dict: Data hasil ekstraksi (nama tempat, rating, ulasan, alamat, URL, latitude, longitude).
+              Jika parsing gagal, mengembalikan None.
     """
     card_soup = BeautifulSoup(card_html_string, 'html.parser')
     data = {
@@ -101,18 +101,51 @@ def parse_card_final(card_html_string):
         print(f"Error parsing satu kartu: {e}")
         return None
 
+def print_banner():
+    """
+    Menampilkan banner dan peringatan penggunaan script.
+    """
+    print("="*70)
+    print(r"""
+███████╗███████╗██╗    ██╗██╗   ██╗███████╗ ██████╗██████╗  █████╗ ██████╗ 
+██╔════╝██╔════╝██║    ██║██║   ██║██╔════╝██╔════╝██╔══██╗██╔══██╗██╔══██╗
+███████╗█████╗  ██║ █╗ ██║██║   ██║███████╗██║     ██████╔╝███████║██████╔╝
+╚════██║██╔══╝  ██║███╗██║██║   ██║╚════██║██║     ██╔══██╗██╔══██║██╔═══╝ 
+███████║███████╗╚███╔███╔╝╚██████╔╝███████║╚██████╗██║  ██║██║  ██║██║     
+╚══════╝╚══════╝ ╚══╝╚══╝  ╚═════╝ ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     
+""")
+    print("="*70)
+    print("PERINGATAN: Script ini hanya untuk kebutuhan riset dan ilmu pengetahuan.")
+    print("Penggunaan data hasil scraping harus mematuhi kebijakan dan hukum yang berlaku.")
+
 def main():
     """
     Fungsi utama untuk menjalankan proses scraping Google Maps dan menyimpan hasil ke file CSV.
+
+    Langkah:
+    1. Meminta input kata kunci pencarian dan nama file output.
+    2. Membuka Google Maps dan melakukan pencarian.
+    3. Melakukan scroll otomatis untuk memuat semua hasil.
+    4. Mengekstrak data dari setiap kartu hasil pencarian.
+    5. Menghapus duplikat dan menyimpan hasil ke file CSV.
     """
-    print(f"Memulai Scraper Final untuk: '{SEARCH_QUERY}'")
+    print_banner()
+    search_query = input("Masukkan kata kunci pencarian (misal: 'Pasar di Kabupaten Pringsewu'): ").strip()
+    if not search_query:
+        print("Kata kunci tidak boleh kosong!")
+        return
+    output_filename = input("Nama file output CSV [hasil_scrape.csv]: ").strip()
+    if not output_filename:
+        output_filename = "hasil_scrape.csv"
+
+    print(f"\nMemulai Scraper untuk: '{search_query}'")
     options = webdriver.ChromeOptions()
     options.add_argument("--start-maximized")
     options.add_argument("--lang=id-ID")
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     try:
-        url = f"https://www.google.com/maps/search/{SEARCH_QUERY.replace(' ', '+')}"
+        url = f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}"
         driver.get(url)
         scroll_panel_xpath = "//div[contains(@aria-label, 'Hasil untuk')]"
         wait = WebDriverWait(driver, 30)
@@ -136,9 +169,11 @@ def main():
             if card_data:
                 scraped_data.append(card_data)
         if scraped_data:
-            print(f"Berhasil mengekstrak {len(scraped_data)} data. Menyimpan ke '{OUTPUT_FILENAME}'...")
+            print(f"Berhasil mengekstrak {len(scraped_data)} data. Menghapus duplikat...")
             df = pd.DataFrame(scraped_data)
-            df.to_csv(OUTPUT_FILENAME, index=False, encoding='utf-8-sig')
+            df = df.drop_duplicates(subset=["Nama Tempat", "URL Google Maps"])
+            print(f"Data setelah duplikat dihapus: {len(df)}")
+            df.to_csv(output_filename, index=False, encoding='utf-8-sig')
             print("Proses Selesai.")
         else:
             print("Tidak ada data yang berhasil diekstrak.")
