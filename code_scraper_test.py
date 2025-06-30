@@ -118,25 +118,23 @@ def print_banner():
     print("PERINGATAN: Script ini hanya untuk kebutuhan riset dan ilmu pengetahuan.")
     print("Penggunaan data hasil scraping harus mematuhi kebijakan dan hukum yang berlaku.")
 
-def main():
+def main(search_query=None, output_filename=None):
     """
     Fungsi utama untuk menjalankan proses scraping Google Maps dan menyimpan hasil ke file CSV.
 
-    Langkah:
-    1. Meminta input kata kunci pencarian dan nama file output.
-    2. Membuka Google Maps dan melakukan pencarian.
-    3. Melakukan scroll otomatis untuk memuat semua hasil.
-    4. Mengekstrak data dari setiap kartu hasil pencarian.
-    5. Menghapus duplikat dan menyimpan hasil ke file CSV.
+    Jika search_query dan output_filename diberikan, gunakan parameter tersebut.
+    Jika tidak, minta input dari user (untuk mode CLI).
     """
     print_banner()
-    search_query = input("Masukkan kata kunci pencarian (misal: 'Pasar di Kabupaten Pringsewu'): ").strip()
-    if not search_query:
-        print("Kata kunci tidak boleh kosong!")
-        return
-    output_filename = input("Nama file output CSV [hasil_scrape.csv]: ").strip()
-    if not output_filename:
-        output_filename = "hasil_scrape.csv"
+    if search_query is None:
+        search_query = input("Masukkan kata kunci pencarian (misal: 'Pasar di Kabupaten Pringsewu'): ").strip()
+        if not search_query:
+            print("Kata kunci tidak boleh kosong!")
+            return
+    if output_filename is None:
+        output_filename = input("Nama file output CSV [hasil_scrape.csv]: ").strip()
+        if not output_filename:
+            output_filename = "hasil_scrape.csv"
 
     print(f"\nMemulai Scraper untuk: '{search_query}'")
     options = webdriver.ChromeOptions()
