@@ -17,7 +17,7 @@ Dibuat untuk memudahkan pengguna awam dalam melakukan pengumpulan data awal dari
 from flask import Flask, render_template_string, request, send_file, jsonify
 import threading
 import os
-from code_scraper_test import main as run_scraper
+from scraper import main as run_scraper
 
 app = Flask(__name__)
 
