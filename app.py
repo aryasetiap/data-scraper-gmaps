@@ -1,4 +1,18 @@
-# app.py (Pop-up Selalu Muncul)
+"""
+Aplikasi Web Scraper Google Maps BPS
+------------------------------------
+Aplikasi ini adalah web interface sederhana untuk melakukan scraping data dari Google Maps
+berdasarkan kata kunci pencarian yang diberikan pengguna. Hasil scraping dapat diunduh dalam
+format CSV. Terdapat pop-up disclaimer yang wajib disetujui sebelum menggunakan aplikasi.
+
+Fitur utama:
+- Form input kata kunci pencarian dan nama file output
+- Proses scraping berjalan di backend (menggunakan fungsi dari code_scraper_test.py)
+- Hasil scraping dapat diunduh langsung
+- Pop-up disclaimer untuk persetujuan penggunaan data
+
+Dibuat untuk memudahkan pengguna awam dalam melakukan pengumpulan data awal dari Google Maps.
+"""
 
 from flask import Flask, render_template_string, request, send_file, jsonify
 import threading
@@ -7,6 +21,7 @@ from code_scraper_test import main as run_scraper
 
 app = Flask(__name__)
 
+# HTML_TEMPLATE berisi seluruh tampilan halaman web, termasuk form input, status, dan pop-up disclaimer.
 HTML_TEMPLATE = """
 <!doctype html>
 <html lang="id">
@@ -97,7 +112,7 @@ HTML_TEMPLATE = """
   <div id="disclaimer-overlay">
       <div id="disclaimer-box">
           <h2>Pemberitahuan Penggunaan Data</h2>
-          <p>Alat ini ditujukan untuk membantu pengumpulan data awal untuk keperluan riset internal BPS Kabupaten Pringsewu.</p>
+          <p>Alat ini ditujukan untuk membantu pengumpulan data awal untuk keperluan riset internal.</p>
           <p>Dengan melanjutkan, Anda memahami dan menyetujui poin-poin berikut:</p>
           <ul>
               <li>Data yang dikumpulkan hanya akan digunakan untuk tujuan <strong>riset internal dan non-komersial</strong>.</li>
@@ -132,28 +147,20 @@ HTML_TEMPLATE = """
     </div>
   </div>
   <footer class="footer">
-    &copy; 2025 Badan Pusat Statistik | Developed by <a href="https://github.com/aryasetiap">Arya Setia Pratama</a>
+    &copy; 2025 Badan Pusat Statistik Kabupaten Pringsewu | Developed by <a href="https://github.com/aryasetiap">Arya Setia Pratama</a>
   </footer>
 
   <script>
-    // JAVASCRIPT UNTUK DISCLAIMER POP-UP
+    // Pop-up disclaimer wajib disetujui sebelum menggunakan aplikasi
     document.addEventListener('DOMContentLoaded', function() {
         const overlay = document.getElementById('disclaimer-overlay');
         const agreeButton = document.getElementById('agree-button');
-        
-        // [DIHAPUS] Bagian kode yang memeriksa sessionStorage dihapus agar pop-up selalu muncul
-        // if (sessionStorage.getItem('disclaimerAgreed') === 'true') {
-        //     overlay.classList.add('hidden');
-        // }
-        
         agreeButton.addEventListener('click', function() {
             overlay.classList.add('hidden');
-            // [DIHAPUS] Bagian kode yang menyimpan ke sessionStorage dihapus
-            // sessionStorage.setItem('disclaimerAgreed', 'true');
         });
     });
 
-    // JAVASCRIPT UNTUK FORM SUBMISSION
+    // Proses submit form scraping
     document.getElementById('scraper-form').addEventListener('submit', function(event) {
         event.preventDefault();
         const form = event.target;
@@ -202,10 +209,21 @@ HTML_TEMPLATE = """
 
 @app.route('/', methods=['GET'])
 def index():
+    """
+    Menampilkan halaman utama aplikasi web.
+    Halaman ini berisi form input pencarian, pop-up disclaimer, dan instruksi penggunaan.
+    """
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/start-scraping', methods=['POST'])
 def start_scraping():
+    """
+    Endpoint untuk memulai proses scraping.
+    - Menerima input kata kunci pencarian dan nama file output dari form.
+    - Memanggil fungsi scraping (run_scraper) di thread terpisah.
+    - Setelah selesai, mengembalikan status dan nama file hasil scraping dalam format JSON.
+    - Jika terjadi error, mengembalikan pesan error yang mudah dipahami.
+    """
     try:
         search_query = request.form['search_query']
         output_filename = request.form['output_filename'] or 'hasil_scrape.csv'
@@ -226,7 +244,15 @@ def start_scraping():
 
 @app.route('/download/<filename>')
 def download(filename):
+    """
+    Endpoint untuk mengunduh file hasil scraping.
+    - Pengguna dapat mengunduh file CSV hasil scraping dengan mengklik tombol download.
+    """
     return send_file(filename, as_attachment=True)
 
 if __name__ == '__main__':
+    """
+    Menjalankan aplikasi Flask dalam mode debug.
+    Pengguna dapat mengakses aplikasi melalui browser di alamat http://localhost:5000
+    """
     app.run(debug=True)
