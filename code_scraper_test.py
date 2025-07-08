@@ -1,21 +1,18 @@
 """
-Google Maps Scraper
+code_scraper_test.py (Versi 3.1 - Perbaikan Ekstraksi Lat/Lon)
 
-Script ini melakukan scraping pada hasil pencarian Google Maps dan mengekstrak informasi seperti nama tempat, rating, jumlah ulasan, alamat, URL Google Maps, latitude, dan longitude. Hasil ekstraksi disimpan dalam file CSV.
+Sewu Scrap - Google Maps Scraper v3.1 (Polished Build)
 
-Dependencies:
-- Selenium
-- BeautifulSoup
-- Pandas
-- webdriver_manager
+Deskripsi:
+Script ini digunakan untuk mengambil (scrape) data tempat dari Google Maps berdasarkan kata kunci pencarian.
+Data yang diambil meliputi nama tempat, rating, jumlah ulasan, alamat, situs web, nomor telepon, URL Google Maps, latitude, dan longitude.
+Hasil data akan disimpan dalam file CSV yang dapat dibuka dengan Excel.
 
-Cara kerja:
-1. Membuka Google Maps dengan query pencarian.
-2. Melakukan scroll otomatis untuk memuat semua hasil.
-3. Mengekstrak data dari setiap kartu hasil pencarian.
-4. Menyimpan data ke file CSV.
+Catatan:
+- Script ini menggunakan Selenium untuk mengotomasi browser Google Chrome.
+- Gunakan script ini hanya untuk keperluan riset internal dan non-komersial.
 
-PERINGATAN: Script ini hanya untuk kebutuhan riset dan ilmu pengetahuan. Penggunaan data hasil scraping harus mematuhi kebijakan dan hukum yang berlaku.
+Developer: Arya Setia Pratama | BPS Kabupaten Pringgiran
 """
 
 import time
@@ -26,157 +23,195 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
-from bs4 import BeautifulSoup
-
-def parse_card_final(card_html_string):
-    """
-    Mengekstrak informasi dari satu kartu hasil pencarian Google Maps.
-
-    Args:
-        card_html_string (str): HTML dari satu kartu hasil pencarian.
-
-    Returns:
-        dict: Data hasil ekstraksi (nama tempat, rating, ulasan, alamat, URL, latitude, longitude).
-              Jika parsing gagal, mengembalikan None.
-    """
-    card_soup = BeautifulSoup(card_html_string, 'html.parser')
-    data = {
-        "Nama Tempat": "N/A", "Rating": "N/A", "Jumlah Ulasan": 0,
-        "Alamat": "N/A", "URL Google Maps": "N/A",
-        "Latitude": "N/A", "Longitude": "N/A"
-    }
-
-    try:
-        nama_element = card_soup.select_one('div.qBF1Pd, div.font-medium')
-        if not nama_element: return None
-        data['Nama Tempat'] = nama_element.text.strip()
-
-        rating_container = card_soup.select_one('span.ZkP5Je')
-        if rating_container:
-            rating_element = rating_container.select_one('span.MW4etd')
-            if rating_element:
-                data['Rating'] = float(rating_element.text.strip().replace(',', '.'))
-            ulasan_element = rating_container.select_one('span.UY7F9')
-            if ulasan_element:
-                ulasan_text = ulasan_element.text.strip()
-                ulasan_match = re.search(r'(\d+)', ulasan_text)
-                if ulasan_match:
-                    data['Jumlah Ulasan'] = int(ulasan_match.group(1))
-
-        link_element = card_soup.select_one('a')
-        if link_element: data['URL Google Maps'] = link_element.get('href')
-        if link_element:
-            url = link_element.get('href')
-            data['URL Google Maps'] = url
-            coord_match = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url)
-            if coord_match:
-                data['Latitude'] = float(coord_match.group(1))
-                data['Longitude'] = float(coord_match.group(2))
-
-        address_found = False
-        all_lines = card_soup.get_text(separator='\n', strip=True).split('\n')
-        address_keywords = ['Jl.', 'Jalan', 'Gg.', 'No.', 'Kec.', 'Kel.']
-
-        def get_clean_address(line):
-            if '·' in line:
-                return line.split('·', 1)[1].strip()
-            else:
-                return line.strip()
-
-        for line in all_lines:
-            if any(keyword in line for keyword in address_keywords):
-                data['Alamat'] = get_clean_address(line)
-                address_found = True
-                break
-
-        if not address_found:
-            for line in all_lines:
-                if '·' in line and data['Nama Tempat'] not in line:
-                    data['Alamat'] = get_clean_address(line)
-                    break
-
-        return data
-    except Exception as e:
-        print(f"Error parsing satu kartu: {e}")
-        return None
 
 def print_banner():
     """
-    Menampilkan banner dan peringatan penggunaan script.
+    Menampilkan banner informasi dan peringatan di awal program.
+    Banner ini berisi nama aplikasi, versi, dan peringatan penggunaan.
     """
     print("="*70)
-    print(r"""
-███████╗███████╗██╗    ██╗██╗   ██╗███████╗ ██████╗██████╗  █████╗ ██████╗ 
-██╔════╝██╔════╝██║    ██║██║   ██║██╔════╝██╔════╝██╔══██╗██╔══██╗██╔══██╗
-███████╗█████╗  ██║ █╗ ██║██║   ██║███████╗██║     ██████╔╝███████║██████╔╝
-╚════██║██╔══╝  ██║███╗██║██║   ██║╚════██║██║     ██╔══██╗██╔══██║██╔═══╝ 
-███████║███████╗╚███╔███╔╝╚██████╔╝███████║╚██████╗██║  ██║██║  ██║██║     
-╚══════╝╚══════╝ ╚══╝╚══╝  ╚═════╝ ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     
-""")
+    print("\nSewu Scrap - Google Maps Scraper v3.1 (Polished Build)")
     print("="*70)
-    print("PERINGATAN: Script ini hanya untuk kebutuhan riset dan ilmu pengetahuan.")
-    print("Penggunaan data hasil scraping harus mematuhi kebijakan dan hukum yang berlaku.")
+    print("PERINGATAN: Gunakan secara bijak untuk riset internal & non-komersial.")
 
 def main(search_query=None, output_filename=None):
     """
-    Fungsi utama untuk menjalankan proses scraping Google Maps dan menyimpan hasil ke file CSV.
+    Fungsi utama untuk menjalankan proses scraping Google Maps.
 
-    Jika search_query dan output_filename diberikan, gunakan parameter tersebut.
-    Jika tidak, minta input dari user (untuk mode CLI).
+    Args:
+        search_query (str, optional): Kata kunci pencarian tempat di Google Maps.
+        output_filename (str, optional): Nama file output hasil scraping (format CSV).
+
+    Langkah-langkah utama:
+    1. Membuka browser Chrome secara otomatis (bisa mode headless/tanpa tampilan).
+    2. Melakukan pencarian berdasarkan kata kunci yang diberikan.
+    3. Mengumpulkan semua URL tempat dari hasil pencarian.
+    4. Mengunjungi setiap URL untuk mengambil detail informasi tempat.
+    5. Menyimpan hasil data ke file CSV.
     """
+    HEADLESS_MODE = True  # Jika True, browser berjalan di background tanpa tampilan
+
     print_banner()
     if search_query is None:
-        search_query = input("Masukkan kata kunci pencarian (misal: 'Pasar di Kabupaten Pringsewu'): ").strip()
-        if not search_query:
-            print("Kata kunci tidak boleh kosong!")
-            return
+        search_query = input("Masukkan kata kunci pencarian: ").strip()
     if output_filename is None:
-        output_filename = input("Nama file output CSV [hasil_scrape.csv]: ").strip()
-        if not output_filename:
-            output_filename = "hasil_scrape.csv"
+        output_filename = input("Nama file output CSV [hasil_scrape.csv]: ").strip() or "hasil_scrape.csv"
 
-    print(f"\nMemulai Scraper untuk: '{search_query}'")
+    print(f"\n[INFO] Memulai Scraper untuk: '{search_query}'")
     options = webdriver.ChromeOptions()
     options.add_argument("--start-maximized")
     options.add_argument("--lang=id-ID")
+    if HEADLESS_MODE:
+        options.add_argument("--headless")
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
+
+    scraped_data = []
     try:
-        url = f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}"
-        driver.get(url)
-        scroll_panel_xpath = "//div[contains(@aria-label, 'Hasil untuk')]"
-        wait = WebDriverWait(driver, 30)
-        scrollable_div = wait.until(EC.presence_of_element_located((By.XPATH, scroll_panel_xpath)))
-        print("Memulai scroll otomatis...")
-        last_height = -1
-        while True:
-            driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", scrollable_div)
-            time.sleep(3)
-            new_height = driver.execute_script("return arguments[0].scrollHeight", scrollable_div)
-            if new_height == last_height: break
-            last_height = new_height
-        print("Scroll selesai.")
-        card_selector_css = "div[jsaction*='mouseover:pane']"
-        cards_elements = driver.find_elements(By.CSS_SELECTOR, card_selector_css)
-        print(f"Ditemukan {len(cards_elements)} kartu. Memulai ekstraksi...")
-        scraped_data = []
-        for card_element in cards_elements:
-            card_html = card_element.get_attribute('outerHTML')
-            card_data = parse_card_final(card_html)
-            if card_data:
-                scraped_data.append(card_data)
-        if scraped_data:
-            print(f"Berhasil mengekstrak {len(scraped_data)} data. Menghapus duplikat...")
-            df = pd.DataFrame(scraped_data)
-            df = df.drop_duplicates(subset=["Nama Tempat", "URL Google Maps"])
-            print(f"Data setelah duplikat dihapus: {len(df)}")
-            df.to_csv(output_filename, index=False, encoding='utf-8-sig')
-            print("Proses Selesai.")
-        else:
-            print("Tidak ada data yang berhasil diekstrak.")
+        # LANGKAH 1: Kumpulkan semua URL tempat dari hasil pencarian
+        search_url = f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}"
+        driver.get(search_url)
+        wait = WebDriverWait(driver, 20)
+
+        # Mencoba menutup pop-up persetujuan cookie jika muncul
+        try:
+            print("[INFO] Mencari pop-up persetujuan cookie...")
+            consent_button_selector = 'button[aria-label*="Accept all"], button[aria-label*="Setuju semua"]'
+            consent_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, consent_button_selector)))
+            consent_button.click()
+            print("[INFO] Pop-up persetujuan diklik.")
+        except TimeoutException:
+            print("[INFO] Tidak ada pop-up persetujuan yang ditemukan.")
+
+        print("[INFO] Menunggu panel hasil pencarian...")
+        scroll_panel_selector = 'div[role="feed"]'
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, scroll_panel_selector)))
+        print("[INFO] Panel ditemukan. Memberi jeda...")
+        time.sleep(2)
+
+        RESULTS_SELECTOR = 'a.hfpxzc'
+        print("[INFO] Memulai scroll untuk mengumpulkan semua URL...")
+        patience_counter = 0
+        patience_threshold = 3
+        last_known_count = 0
+
+        # Melakukan scroll pada panel hasil pencarian untuk memunculkan semua tempat
+        while patience_counter < patience_threshold:
+            try:
+                scrollable_div = driver.find_element(By.CSS_SELECTOR, scroll_panel_selector)
+                driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", scrollable_div)
+                time.sleep(3)
+                current_card_count = len(driver.find_elements(By.CSS_SELECTOR, RESULTS_SELECTOR))
+                if current_card_count > last_known_count:
+                    last_known_count = current_card_count
+                    patience_counter = 0
+                    print(f"  -> Menemukan {last_known_count} URL... (Kesabaran direset)")
+                else:
+                    patience_counter += 1
+                    print(f"  -> Jumlah URL tidak bertambah. (Kesabaran: {patience_counter}/{patience_threshold})")
+            except Exception as e:
+                print(f"[ERROR] Error saat scroll: {e}, menghentikan scroll.")
+                break
+
+        place_links = driver.find_elements(By.CSS_SELECTOR, RESULTS_SELECTOR)
+        urls = [link.get_attribute('href') for link in place_links if link.get_attribute('href')]
+        unique_urls = list(dict.fromkeys(urls))  # Menghapus duplikat sambil menjaga urutan
+        print(f"[INFO] Scroll selesai. Ditemukan {len(unique_urls)} URL unik.")
+
+        # LANGKAH 2: Kunjungi setiap URL untuk ekstraksi detail tempat
+        print(f"[INFO] Memulai ekstraksi detail dari {len(unique_urls)} URL...")
+        for i, url in enumerate(unique_urls):
+            try:
+                driver.get(url)
+                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'h1.DUwDvf')))
+                time.sleep(1.5)
+
+                # Mengambil nama tempat
+                nama = driver.find_element(By.CSS_SELECTOR, 'h1.DUwDvf').text
+
+                # Mengambil rating dan jumlah ulasan
+                rating, ulasan = "N/A", 0
+                try:
+                    rating_text = driver.find_element(By.CSS_SELECTOR, 'div.F7nice').text.strip()
+                    parts = rating_text.split('(')
+                    rating = parts[0].strip()
+                    ulasan_match = re.search(r'(\d[\d,.]*)', parts[1])
+                    if ulasan_match:
+                        ulasan = int(re.sub(r'[.,]', '', ulasan_match.group(1)))
+                except NoSuchElementException:
+                    pass
+
+                # Mengambil alamat, website, dan nomor telepon
+                alamat, website, telepon = "N/A", "N/A", "N/A"
+                try:
+                    address_element = driver.find_element(By.CSS_SELECTOR, '[data-item-id="address"]')
+                    alamat = address_element.find_element(By.CSS_SELECTOR, 'div.Io6YTe').text
+                except NoSuchElementException:
+                    pass
+                try:
+                    website_element = driver.find_element(By.CSS_SELECTOR, '[data-item-id="authority"]')
+                    website = website_element.find_element(By.CSS_SELECTOR, 'div.Io6YTe').text
+                except NoSuchElementException:
+                    pass
+                try:
+                    phone_element = driver.find_element(By.CSS_SELECTOR, '[data-item-id*="phone:tel:"]')
+                    telepon = phone_element.find_element(By.CSS_SELECTOR, 'div.Io6YTe').text
+                except NoSuchElementException:
+                    pass
+
+                # Mengambil latitude dan longitude dari URL
+                current_url = driver.current_url
+                lat, lon = "N/A", "N/A"
+                if "@" in current_url:
+                    try:
+                        coords_part = current_url.split('@')[1]
+                        coords_array = coords_part.split(',')
+                        lat = coords_array[0]
+                        lon = coords_array[1]
+                    except (IndexError, Exception):
+                        pass
+                else:
+                    match = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', current_url)
+                    if match:
+                        lat = match.group(1)
+                        lon = match.group(2)
+
+                data = {
+                    "Nama Tempat": nama,
+                    "Rating": rating,
+                    "Jumlah Ulasan": ulasan,
+                    "Alamat": alamat,
+                    "Situs Web": website,
+                    "Nomor Telepon": telepon,
+                    "URL Google Maps": current_url,
+                    "Latitude": lat,
+                    "Longitude": lon,
+                }
+                scraped_data.append(data)
+                print(f"  [OK] {i + 1}/{len(unique_urls)} - {nama} | Data lengkap: {alamat != 'N/A' and website != 'N/A' and telepon != 'N/A'}")
+
+            except TimeoutException:
+                print(f"  [GAGAL] {i + 1}/{len(unique_urls)} - Timeout saat memuat URL: {url}")
+            except Exception as e:
+                print(f"  [ERROR] {i + 1}/{len(unique_urls)} - Terjadi error pada URL {url}: {e}")
+
     finally:
         driver.quit()
+
+    # Menyimpan hasil data ke file CSV jika ada data yang berhasil diambil
+    if scraped_data:
+        print(f"\n[INFO] Berhasil mengekstrak {len(scraped_data)} data. Menyimpan ke {output_filename}...")
+        df = pd.DataFrame(scraped_data)
+        df = df.drop_duplicates(subset=["Nama Tempat", "Alamat"])
+        df.to_csv(output_filename, index=False, encoding='utf-8-sig')
+        print("==============================================")
+        print("  ✅ PROYEK SELESAI DAN BERHASIL! ✅")
+        print("==============================================")
+    else:
+        print("[INFO] Tidak ada data yang berhasil diekstrak.")
 
 if __name__ == '__main__':
     main()
