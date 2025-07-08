@@ -64,7 +64,7 @@ def main(search_query=None, output_filename=None):
     4. Mengunjungi setiap URL untuk mengambil detail informasi tempat.
     5. Menyimpan hasil data ke file CSV.
     """
-    HEADLESS_MODE = True  # Jika True, browser berjalan di background tanpa tampilan
+    HEADLESS_MODE = False  # Jika True, browser berjalan di background tanpa tampilan
     RESTART_INTERVAL = 50  # Restart driver setiap 50 URL
 
     print_banner()
