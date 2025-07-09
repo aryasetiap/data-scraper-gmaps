@@ -29,8 +29,10 @@ def setup_driver(headless=True):
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
-def main(search_query=None, output_filename=None):
-    HEADLESS_MODE = True
+def main(search_query=None, output_filename=None, headless_mode_enabled=True):
+    """
+    Fungsi utama untuk menjalankan proses scraping Google Maps.
+    """
     RESTART_INTERVAL = 50
 
     print_banner()
@@ -39,7 +41,7 @@ def main(search_query=None, output_filename=None):
     if output_filename is None:
         output_filename = input("Nama file output CSV [hasil_scrape.csv]: ").strip() or "hasil_scrape.csv"
 
-    driver = setup_driver(headless=HEADLESS_MODE)
+    driver = setup_driver(headless=headless_mode_enabled)
     scraped_data = []
     
     try:
@@ -57,16 +59,11 @@ def main(search_query=None, output_filename=None):
 
         unique_urls = []
         
-        # =================================================================================
-        # ## [REVISI UTAMA] DETEKSI HALAMAN (DAFTAR HASIL vs. DETAIL LANGSUNG)
-        # =================================================================================
         print("[INFO] Mendeteksi tipe halaman hasil pencarian...")
         try:
-            # Coba tunggu panel daftar hasil (div[role="feed"])
             WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div[role="feed"]')))
             print("[INFO] Halaman 'Daftar Hasil' terdeteksi. Memulai proses scroll...")
             
-            # === LANGKAH 1: KUMPULKAN SEMUA URL (JIKA INI HALAMAN DAFTAR) ===
             RESULTS_SELECTOR = 'a.hfpxzc'
             patience_counter, patience_threshold, last_known_count = 0, 3, 0
             
@@ -92,22 +89,21 @@ def main(search_query=None, output_filename=None):
             print(f"[INFO] Scroll selesai. Ditemukan {len(unique_urls)} URL unik.")
 
         except TimeoutException:
-            # Jika panel daftar tidak ditemukan, kita asumsikan ini adalah halaman detail langsung
             print("[INFO] Halaman 'Detail Langsung' terdeteksi.")
             unique_urls = [driver.current_url]
 
         # === LANGKAH 2: KUNJUNGI SETIAP URL UNTUK EKSTRAKSI DETAIL ===
         print(f"[INFO] Memulai ekstraksi detail dari {len(unique_urls)} URL...")
         for i, url in enumerate(unique_urls):
+            # [PERUBAHAN] Logika restart driver menggunakan nilai dari argumen
             if i > 0 and i % RESTART_INTERVAL == 0:
                 print(f"\n[STABILITAS] Mencapai batas {RESTART_INTERVAL} URL. Merestart driver...")
                 driver.quit()
-                driver = setup_driver(headless=HEADLESS_MODE)
+                driver = setup_driver(headless=headless_mode_enabled)
                 wait = WebDriverWait(driver, 20)
                 print("[STABILITAS] Driver berhasil direstart. Melanjutkan proses...\n")
             
             try:
-                # Jika URL sudah merupakan URL saat ini (kasus hasil tunggal), tidak perlu driver.get lagi
                 if driver.current_url != url:
                     driver.get(url)
 
@@ -126,7 +122,6 @@ def main(search_query=None, output_filename=None):
                         if ulasan_match: ulasan = int(re.sub(r'[.,]', '', ulasan_match.group(1)))
                 except NoSuchElementException: pass
 
-                # ## [REVISI] Mengembalikan logika status sesuai permintaan ##
                 status_operasional = "Tidak Tutup Permanen"
                 try:
                     driver.find_element(By.CSS_SELECTOR, 'span.fCEvvc')

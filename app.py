@@ -138,10 +138,16 @@ HTML_TEMPLATE = """
           <label for="output_filename" class="form-label">Nama File Output</label>
           <input type="text" class="form-control" id="output_filename" name="output_filename" value="hasil_scrape.csv">
         </div>
-        <button type="submit" id="submit-button" class="btn btn-submit w-100">
-          <span id="button-text">Mulai Scraping</span>
-          <div id="loading-spinner" class="spinner-border spinner-border-sm text-light" role="status" style="display: none;"></div>
-        </button>
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="headless_mode" name="headless_mode" checked>
+            <label class="form-check-label" for="headless_mode">Mode Headless</label>
+          </div>
+          <button type="submit" id="submit-button" class="btn btn-submit" style="width: 150px;">
+            <span id="button-text">Mulai Scraping</span>
+            <div id="loading-spinner" class="spinner-border spinner-border-sm text-light" role="status" style="display: none;"></div>
+          </button>
+        </div>
       </form>
       <div id="status-area"></div>
     </div>
@@ -219,21 +225,25 @@ def index():
 def start_scraping():
     """
     Endpoint untuk memulai proses scraping.
-    - Menerima input kata kunci pencarian dan nama file output dari form.
-    - Memanggil fungsi scraping (run_scraper) di thread terpisah.
-    - Setelah selesai, mengembalikan status dan nama file hasil scraping dalam format JSON.
-    - Jika terjadi error, mengembalikan pesan error yang mudah dipahami.
     """
     try:
         search_query = request.form['search_query']
         output_filename = request.form['output_filename'] or 'hasil_scrape.csv'
+        
+        # [PERUBAHAN] Cek apakah checkbox 'headless_mode' dicentang
+        # Jika dicentang, request.form akan memiliki key 'headless_mode'. Jika tidak, key tidak ada.
+        headless_choice = 'headless_mode' in request.form
+        
         if not search_query:
             return jsonify({'status': 'error', 'message': 'Kata kunci pencarian tidak boleh kosong.'})
         if os.path.exists(output_filename):
             os.remove(output_filename)
-        scraper_thread = threading.Thread(target=run_scraper, args=(search_query, output_filename))
+            
+        # [PERUBAHAN] Meneruskan pilihan headless ke fungsi scraper
+        scraper_thread = threading.Thread(target=run_scraper, args=(search_query, output_filename, headless_choice))
         scraper_thread.start()
         scraper_thread.join()
+        
         if os.path.exists(output_filename):
             return jsonify({'status': 'success', 'filename': output_filename})
         else:
