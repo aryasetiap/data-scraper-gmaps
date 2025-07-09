@@ -14,7 +14,7 @@ Fitur utama:
 Dibuat untuk memudahkan pengguna awam dalam melakukan pengumpulan data awal dari Google Maps.
 """
 
-from flask import Flask, render_template_string, request, send_file, jsonify
+from flask import Flask, render_template_string, request, send_file, jsonify, send_from_directory
 import threading
 import os
 from scraper import main as run_scraper
@@ -256,13 +256,29 @@ def start_scraping():
 def download(filename):
     """
     Endpoint untuk mengunduh file hasil scraping.
-    - Pengguna dapat mengunduh file CSV hasil scraping dengan mengklik tombol download.
     """
-    return send_file(filename, as_attachment=True)
+    # Pastikan path absolut ke file
+    file_path = os.path.join(os.getcwd(), filename)
+    if not os.path.exists(file_path):
+        return "File tidak ditemukan.", 404
+    return send_file(file_path, as_attachment=True)
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, ''),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 if __name__ == '__main__':
-    """
-    Menjalankan aplikasi Flask dalam mode debug.
-    Pengguna dapat mengakses aplikasi melalui browser di alamat http://localhost:5000
-    """
-    app.run(debug=True)
+    import sys
+    import threading
+    import webbrowser
+
+    def open_browser():
+        webbrowser.open_new('http://127.0.0.1:5000')
+
+    # Jika dijalankan sebagai .exe (frozen), buka browser otomatis
+    if getattr(sys, 'frozen', False):
+        threading.Timer(1.5, open_browser).start()
+        app.run(debug=False)
+    else:
+        app.run(debug=True)
