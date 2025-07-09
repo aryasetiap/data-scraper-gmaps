@@ -1,19 +1,4 @@
-"""
-code_scraper_test.py (Versi 3.2 - Peningkatan Stabilitas dan Skalabilitas)
-
-Sewu Scrap - Google Maps Scraper v3.2 (Scalability Build)
-
-Deskripsi:
-Script ini digunakan untuk mengambil (scrape) data tempat dari Google Maps berdasarkan kata kunci pencarian.
-Data yang diambil meliputi nama tempat, rating, jumlah ulasan, alamat, situs web, nomor telepon, URL Google Maps, latitude, dan longitude.
-Hasil data akan disimpan dalam file CSV yang dapat dibuka dengan Excel.
-
-Catatan:
-- Script ini menggunakan Selenium untuk mengotomasi browser Google Chrome.
-- Gunakan script ini hanya untuk keperluan riset internal dan non-komersial.
-
-Developer: Arya Setia Pratama | BPS Kabupaten Pringgiran
-"""
+# code_scraper_test.py (Versi 3.5 - Penanganan Hasil Tunggal & Logika Status Final)
 
 import time
 import pandas as pd
@@ -27,17 +12,12 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 
 def print_banner():
-    """
-    Menampilkan banner informasi dan peringatan di awal program.
-    Banner ini berisi nama aplikasi, versi, dan peringatan penggunaan.
-    """
     print("="*70)
-    print("\nSewu Scrap - Google Maps Scraper v3.2 (Scalability Build)")
+    print("\nSewu Scrap - Google Maps Scraper v3.5 (Robust Build)")
     print("="*70)
     print("PERINGATAN: Gunakan secara bijak untuk riset internal & non-komersial.")
 
 def setup_driver(headless=True):
-    """Mengatur dan mengembalikan instance driver Chrome."""
     print("[SETUP] Menginisialisasi driver Chrome...")
     options = webdriver.ChromeOptions()
     options.add_argument("--start-maximized")
@@ -50,22 +30,8 @@ def setup_driver(headless=True):
     return driver
 
 def main(search_query=None, output_filename=None):
-    """
-    Fungsi utama untuk menjalankan proses scraping Google Maps.
-
-    Args:
-        search_query (str, optional): Kata kunci pencarian tempat di Google Maps.
-        output_filename (str, optional): Nama file output hasil scraping (format CSV).
-
-    Langkah-langkah utama:
-    1. Membuka browser Chrome secara otomatis (bisa mode headless/tanpa tampilan).
-    2. Melakukan pencarian berdasarkan kata kunci yang diberikan.
-    3. Mengumpulkan semua URL tempat dari hasil pencarian.
-    4. Mengunjungi setiap URL untuk mengambil detail informasi tempat.
-    5. Menyimpan hasil data ke file CSV.
-    """
-    HEADLESS_MODE = False  # Jika True, browser berjalan di background tanpa tampilan
-    RESTART_INTERVAL = 50  # Restart driver setiap 50 URL
+    HEADLESS_MODE = True
+    RESTART_INTERVAL = 50
 
     print_banner()
     if search_query is None:
@@ -77,88 +43,97 @@ def main(search_query=None, output_filename=None):
     scraped_data = []
     
     try:
-        # === LANGKAH 1: KUMPULKAN SEMUA URL TEMPAT ===
         search_url = f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}"
         driver.get(search_url)
         wait = WebDriverWait(driver, 20)
 
-        # Mencoba menutup pop-up persetujuan cookie jika muncul
         try:
             print("[INFO] Mencari pop-up persetujuan cookie...")
             consent_button_selector = 'button[aria-label*="Accept all"], button[aria-label*="Setuju semua"]'
-            consent_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, consent_button_selector)))
-            consent_button.click()
+            WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, consent_button_selector))).click()
             print("[INFO] Pop-up persetujuan diklik.")
         except TimeoutException:
             print("[INFO] Tidak ada pop-up persetujuan yang ditemukan.")
 
-        print("[INFO] Menunggu panel hasil pencarian...")
-        scroll_panel_selector = 'div[role="feed"]'
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, scroll_panel_selector)))
-        print("[INFO] Panel ditemukan. Memberi jeda...")
-        time.sleep(2)
+        unique_urls = []
         
-        RESULTS_SELECTOR = 'a.hfpxzc'
-        print("[INFO] Memulai scroll untuk mengumpulkan semua URL...")
-        patience_counter = 0
-        patience_threshold = 3
-        last_known_count = 0
+        # =================================================================================
+        # ## [REVISI UTAMA] DETEKSI HALAMAN (DAFTAR HASIL vs. DETAIL LANGSUNG)
+        # =================================================================================
+        print("[INFO] Mendeteksi tipe halaman hasil pencarian...")
+        try:
+            # Coba tunggu panel daftar hasil (div[role="feed"])
+            WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div[role="feed"]')))
+            print("[INFO] Halaman 'Daftar Hasil' terdeteksi. Memulai proses scroll...")
+            
+            # === LANGKAH 1: KUMPULKAN SEMUA URL (JIKA INI HALAMAN DAFTAR) ===
+            RESULTS_SELECTOR = 'a.hfpxzc'
+            patience_counter, patience_threshold, last_known_count = 0, 3, 0
+            
+            while patience_counter < patience_threshold:
+                try:
+                    driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", driver.find_element(By.CSS_SELECTOR, 'div[role="feed"]'))
+                    time.sleep(3)
+                    current_card_count = len(driver.find_elements(By.CSS_SELECTOR, RESULTS_SELECTOR))
+                    if current_card_count > last_known_count:
+                        last_known_count = current_card_count
+                        patience_counter = 0
+                        print(f"  -> Menemukan {last_known_count} URL... (Kesabaran direset)")
+                    else:
+                        patience_counter += 1
+                        print(f"  -> Jumlah URL tidak bertambah. (Kesabaran: {patience_counter}/{patience_threshold})")
+                except Exception as e:
+                    print(f"[ERROR] Error saat scroll: {e}, menghentikan scroll.")
+                    break
+            
+            place_links = driver.find_elements(By.CSS_SELECTOR, RESULTS_SELECTOR)
+            urls = [link.get_attribute('href') for link in place_links if link.get_attribute('href')]
+            unique_urls = list(dict.fromkeys(urls))
+            print(f"[INFO] Scroll selesai. Ditemukan {len(unique_urls)} URL unik.")
 
-        # Melakukan scroll pada panel hasil pencarian untuk memunculkan semua tempat
-        while patience_counter < patience_threshold:
-            try:
-                scrollable_div = driver.find_element(By.CSS_SELECTOR, scroll_panel_selector)
-                driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", scrollable_div)
-                time.sleep(3)
-                current_card_count = len(driver.find_elements(By.CSS_SELECTOR, RESULTS_SELECTOR))
-                if current_card_count > last_known_count:
-                    last_known_count = current_card_count
-                    patience_counter = 0
-                    print(f"  -> Menemukan {last_known_count} URL... (Kesabaran direset)")
-                else:
-                    patience_counter += 1
-                    print(f"  -> Jumlah URL tidak bertambah. (Kesabaran: {patience_counter}/{patience_threshold})")
-            except Exception as e:
-                print(f"[ERROR] Error saat scroll: {e}, menghentikan scroll.")
-                break
-        
-        place_links = driver.find_elements(By.CSS_SELECTOR, RESULTS_SELECTOR)
-        urls = [link.get_attribute('href') for link in place_links if link.get_attribute('href')]
-        unique_urls = list(dict.fromkeys(urls))  # Menghapus duplikat sambil menjaga urutan
-        print(f"[INFO] Scroll selesai. Ditemukan {len(unique_urls)} URL unik.")
+        except TimeoutException:
+            # Jika panel daftar tidak ditemukan, kita asumsikan ini adalah halaman detail langsung
+            print("[INFO] Halaman 'Detail Langsung' terdeteksi.")
+            unique_urls = [driver.current_url]
 
         # === LANGKAH 2: KUNJUNGI SETIAP URL UNTUK EKSTRAKSI DETAIL ===
         print(f"[INFO] Memulai ekstraksi detail dari {len(unique_urls)} URL...")
         for i, url in enumerate(unique_urls):
-            # [PENINGKATAN] Logika untuk restart driver secara berkala
             if i > 0 and i % RESTART_INTERVAL == 0:
-                print(f"\n[STABILITAS] Mencapai batas {RESTART_INTERVAL} URL. Merestart driver untuk menjaga performa...")
+                print(f"\n[STABILITAS] Mencapai batas {RESTART_INTERVAL} URL. Merestart driver...")
                 driver.quit()
                 driver = setup_driver(headless=HEADLESS_MODE)
                 wait = WebDriverWait(driver, 20)
                 print("[STABILITAS] Driver berhasil direstart. Melanjutkan proses...\n")
             
             try:
-                driver.get(url)
+                # Jika URL sudah merupakan URL saat ini (kasus hasil tunggal), tidak perlu driver.get lagi
+                if driver.current_url != url:
+                    driver.get(url)
+
                 wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'h1.DUwDvf')))
                 time.sleep(1.5)
 
-                # Mengambil nama tempat
                 nama = driver.find_element(By.CSS_SELECTOR, 'h1.DUwDvf').text
-
-                # Mengambil rating dan jumlah ulasan
+                
                 rating, ulasan = "N/A", 0
                 try:
                     rating_text = driver.find_element(By.CSS_SELECTOR, 'div.F7nice').text.strip()
                     parts = rating_text.split('(')
                     rating = parts[0].strip()
-                    # [PERBAIKAN WAJIB] Hanya proses ulasan jika ada datanya (jumlah parts > 1)
                     if len(parts) > 1:
                         ulasan_match = re.search(r'(\d[\d,.]*)', parts[1])
                         if ulasan_match: ulasan = int(re.sub(r'[.,]', '', ulasan_match.group(1)))
                 except NoSuchElementException: pass
 
-                # Mengambil alamat, website, dan nomor telepon
+                # ## [REVISI] Mengembalikan logika status sesuai permintaan ##
+                status_operasional = "Tidak Tutup Permanen"
+                try:
+                    driver.find_element(By.CSS_SELECTOR, 'span.fCEvvc')
+                    status_operasional = "Tutup Permanen"
+                except NoSuchElementException:
+                    pass
+
                 alamat, website, telepon = "N/A", "N/A", "N/A"
                 try:
                     address_element = driver.find_element(By.CSS_SELECTOR, '[data-item-id="address"]')
@@ -172,26 +147,23 @@ def main(search_query=None, output_filename=None):
                     phone_element = driver.find_element(By.CSS_SELECTOR, '[data-item-id*="phone:tel:"]')
                     telepon = phone_element.find_element(By.CSS_SELECTOR, 'div.Io6YTe').text
                 except NoSuchElementException: pass
-                
-                # Mengambil latitude dan longitude dari URL
+
                 current_url = driver.current_url
                 lat, lon = "N/A", "N/A"
                 if "@" in current_url:
                     try:
                         coords_part = current_url.split('@')[1]
                         coords_array = coords_part.split(',')
-                        lat = coords_array[0]
-                        lon = coords_array[1]
-                    except (IndexError, Exception):
-                        pass
+                        lat, lon = coords_array[0], coords_array[1]
+                    except (IndexError, Exception): pass
                 else:
                     match = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', current_url)
                     if match:
-                        lat = match.group(1)
-                        lon = match.group(2)
+                        lat, lon = match.group(1), match.group(2)
 
                 data = {
                     "Nama Tempat": nama,
+                    "Status Operasional": status_operasional,
                     "Rating": rating,
                     "Jumlah Ulasan": ulasan,
                     "Alamat": alamat,
@@ -202,17 +174,16 @@ def main(search_query=None, output_filename=None):
                     "Longitude": lon,
                 }
                 scraped_data.append(data)
-                print(f"  [OK] {i + 1}/{len(unique_urls)} - {nama} | Data lengkap: {alamat != 'N/A' and website != 'N/A' and telepon != 'N/A'}")
+                print(f"  [OK] {i + 1}/{len(unique_urls)} - {nama} | Status: {status_operasional}")
 
             except TimeoutException:
                 print(f"  [GAGAL] {i + 1}/{len(unique_urls)} - Timeout saat memuat URL: {url}")
             except Exception as e:
                 print(f"  [ERROR] {i + 1}/{len(unique_urls)} - Terjadi error pada URL {url}: {e}")
-
+    
     finally:
         driver.quit()
 
-    # Menyimpan hasil data ke file CSV jika ada data yang berhasil diambil
     if scraped_data:
         print(f"\n[INFO] Berhasil mengekstrak {len(scraped_data)} data. Menyimpan ke {output_filename}...")
         df = pd.DataFrame(scraped_data)
